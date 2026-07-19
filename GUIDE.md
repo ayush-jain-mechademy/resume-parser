@@ -9,9 +9,14 @@ metrics, and debug. For the *why* behind the design (how it stays accurate), see
 ## 1. Getting started
 
 ### Prerequisites
-- macOS or Linux
+- **macOS**, or **Linux** — Ubuntu 18.04+ / Debian / Amazon Linux 2 & 2023 /
+  Fedora / Arch (x86-64 or arm64). `setup.sh` installs the toolchain + build deps
+  for apt/dnf/yum/pacman automatically.
 - A Gemini API key — get one free at <https://aistudio.google.com/apikey>
   (⚠️ enable billing before running real candidate data — see [Privacy](#8-privacy))
+
+> On Linux, legacy `.doc`/`.rtf` files are skipped (they rely on macOS `textutil`);
+> **PDF, DOCX and TXT work on every platform.**
 
 ### Install (one command)
 ```bash

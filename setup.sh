@@ -19,37 +19,21 @@ warn() { printf '\033[1;33m[!]\033[0m %s\n' "$*"; }
 
 OS="$(uname -s)"
 
-# --- 1. Rust toolchain -------------------------------------------------------
-if ! command -v cargo >/dev/null 2>&1; then
-  # rustup may already be installed but not on PATH in this shell
-  if [ -f "$HOME/.cargo/env" ]; then
-    # shellcheck disable=SC1091
-    . "$HOME/.cargo/env"
-  fi
-fi
-if ! command -v cargo >/dev/null 2>&1; then
-  say "Installing the Rust toolchain via rustup (non-interactive)…"
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-  # shellcheck disable=SC1091
-  . "$HOME/.cargo/env"
-else
-  say "Rust toolchain found: $(cargo --version)"
-fi
-
-# --- 2. OS build dependencies -----------------------------------------------
+# --- 1. OS build dependencies (FIRST: rustup + cargo need curl and a C toolchain) ---
 case "$OS" in
   Linux)
-    say "Ensuring Linux build dependencies (C compiler, OpenSSL, pkg-config)…"
+    say "Ensuring Linux build dependencies (C compiler, OpenSSL, pkg-config, curl)…"
     if command -v apt-get >/dev/null 2>&1; then
-      sudo apt-get update -y && sudo apt-get install -y build-essential pkg-config libssl-dev curl
+      sudo apt-get update -y
+      sudo apt-get install -y build-essential pkg-config libssl-dev curl ca-certificates
     elif command -v dnf >/dev/null 2>&1; then
-      sudo dnf install -y gcc gcc-c++ make pkgconf-pkg-config openssl-devel curl
+      sudo dnf install -y gcc gcc-c++ make pkgconf-pkg-config openssl-devel curl ca-certificates
     elif command -v yum >/dev/null 2>&1; then
-      sudo yum install -y gcc gcc-c++ make pkgconfig openssl-devel curl
+      sudo yum install -y gcc gcc-c++ make pkgconfig openssl-devel curl ca-certificates
     elif command -v pacman >/dev/null 2>&1; then
-      sudo pacman -Sy --needed --noconfirm base-devel openssl pkgconf curl
+      sudo pacman -Sy --needed --noconfirm base-devel openssl pkgconf curl ca-certificates
     else
-      warn "Unknown package manager — ensure a C compiler, OpenSSL dev headers and pkg-config are installed."
+      warn "Unknown package manager — ensure a C compiler, OpenSSL dev headers, pkg-config and curl are installed."
     fi
     warn "Note: legacy .doc/.rtf parsing uses macOS 'textutil' and is unavailable on Linux (those files are skipped gracefully; PDF/DOCX/TXT work everywhere)."
     ;;
@@ -65,6 +49,41 @@ case "$OS" in
     warn "Unrecognized OS '$OS' — attempting to build anyway."
     ;;
 esac
+
+# --- 2. Rust toolchain (need >= 1.85 for edition 2024) ----------------------
+[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
+
+# True only if a rustc >= 1.85 is on PATH (edition 2024 requirement).
+rust_ok() {
+  command -v rustc >/dev/null 2>&1 || return 1
+  ver="$(rustc --version 2>/dev/null | awk '{print $2}')"
+  major="$(printf '%s' "$ver" | cut -d. -f1)"
+  minor="$(printf '%s' "$ver" | cut -d. -f2)"
+  case "$major" in ''|*[!0-9]*) return 1 ;; esac
+  case "$minor" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$major" -gt 1 ] && return 0
+  [ "$major" -eq 1 ] && [ "$minor" -ge 85 ] && return 0
+  return 1
+}
+
+if rust_ok; then
+  say "Rust $(rustc --version | awk '{print $2}') found."
+elif command -v rustup >/dev/null 2>&1; then
+  say "Rust is missing or too old for edition 2024 — updating via rustup…"
+  rustup update stable && rustup default stable
+  # shellcheck disable=SC1091
+  [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
+else
+  say "Installing the Rust toolchain via rustup (non-interactive)…"
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+  # shellcheck disable=SC1091
+  . "$HOME/.cargo/env"
+fi
+
+if ! rust_ok; then
+  warn "Rust >= 1.85 is required (edition 2024); found: $(rustc --version 2>/dev/null || echo none)."
+  warn "Fix with:  rustup update stable   (install rustup from https://rustup.rs)"
+fi
 
 # --- 3. Build ----------------------------------------------------------------
 say "Building the optimized release binary (first build downloads crates; a few minutes)…"
