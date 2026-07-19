@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Convenience wrapper: build (release) and run the parser on a folder of resumes.
 # Usage: ./run.sh <resume-folder> [extra flags...]
+# Re-exec under bash if started by dash/sh (Ubuntu's /bin/sh) so bashisms work.
+if [ -z "${BASH_VERSION:-}" ]; then exec bash "$0" "$@"; fi
 set -euo pipefail
 
 FOLDER="${1:-sample_resumes}"

@@ -6,8 +6,11 @@
 #   3. Compiles the optimized release binary
 #   4. Seeds a .env for your GEMINI_API_KEY
 #
-# Usage:  ./setup.sh
+# Usage:  ./setup.sh      (also works as: bash setup.sh  or  sh setup.sh)
 #
+# Ubuntu's /bin/sh is dash, which lacks `set -o pipefail` and other bashisms.
+# If we weren't started by bash, re-exec under bash so it works either way.
+if [ -z "${BASH_VERSION:-}" ]; then exec bash "$0" "$@"; fi
 set -euo pipefail
 cd "$(dirname "$0")"
 
