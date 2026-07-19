@@ -25,7 +25,9 @@ cd resume-parser
 ./setup.sh
 ```
 `setup.sh` installs the Rust toolchain if missing, installs the OS build
-dependencies, compiles the optimized binary, and creates a `.env` for you.
+dependencies, compiles the optimized binary, and creates a `.env` for you. It is
+**idempotent — safe to re-run** any time (it skips what's already installed and
+never overwrites an existing `.env`).
 
 ### Add your key
 ```bash
@@ -76,11 +78,23 @@ recursively) and it produces one spreadsheet row per candidate:
 | `-o, --output <path>` | `candidates.xlsx` | Output file; `.csv`/`.json`/`.metrics.json` written alongside |
 | `--model <name>` | `gemini-2.5-flash-lite` | Gemini model for the specialist agents |
 | `--workers <n>` | `6` | Resumes processed concurrently |
-| `--max-concurrent <n>` | `5` | Global cap on simultaneous API calls — **lower if you hit rate limits** |
+| `--max-concurrent <n>` | `5` | Max simultaneous in-flight requests (memory/connections) |
+| `--rpm <n>` | `12` | **Requests-per-minute throttle — the real rate-limit guard.** 12 is safe for the free tier (~15 RPM); raise to 300+ on a paid plan |
 | `--timeout <secs>` | `150` | Hard per-resume cap; a file that exceeds it is abandoned (never stalls the batch) |
 | `--store <path>` | `<output dir>/resume_store.sqlite` | Cache + dedupe + audit database |
 | `--no-cache` | off | Re-extract every file, ignoring the cache |
 | `--limit <n>` | — | Only process the first N files (quick trial) |
+| `--log <path>` | `<output>.log` | Run log (429s, retries, per-resume outcomes) |
+| `--verbose` | off | Log every individual API attempt/response (debug level) |
+
+### Rate limits (free vs paid tier)
+The tool throttles to `--rpm` requests/minute and honors Gemini's `retryDelay` on
+429s. It makes **~7 API calls per resume**, so:
+- **Free tier (~15 RPM):** keep `--rpm 12`. 20 resumes ≈ 140 calls ≈ ~12 min. If you
+  still see 429s in the log, the free tier also has a **daily** cap (RPD) — the log
+  will say "DAILY free-tier quota"; wait ~24h or enable billing.
+- **Paid tier:** run `--rpm 300` (or higher) — the same batch finishes in well under
+  a minute. Nothing else changes; it's just the one flag.
 
 ### Common examples
 ```bash
@@ -192,7 +206,7 @@ sqlite3 resume_store.sqlite "SELECT json FROM candidates;" | python3 -m json.too
 | Symptom | Fix |
 |---|---|
 | `GEMINI_API_KEY … is not set` | `export GEMINI_API_KEY=...` or put it in `.env` |
-| `Gemini HTTP 429` / very slow | Free-tier rate limit — add `--max-concurrent 3 --workers 3`, or enable billing |
+| `Gemini HTTP 429` / "0 succeeded" | Rate/quota limit — check the **log** (it says RPM vs daily RPD). Lower `--rpm 8`; if it's the daily cap, wait ~24h or enable billing |
 | A file shows `timed out after Ns` | That one PDF was pathological and abandoned (batch still completes); re-save the PDF and re-run, or raise `--timeout` |
 | `no supported resumes found` | Check the folder path and that files are pdf/docx/doc/rtf/txt |
 | A candidate looks wrong | Check its `Review Reason`; open the source PDF; hover the evidence note in the Excel |

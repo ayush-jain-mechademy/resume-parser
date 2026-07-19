@@ -47,6 +47,19 @@ struct Cli {
     #[arg(long, default_value_t = 150)]
     timeout: u64,
 
+    /// Requests-per-minute throttle. Free tier is ~15 RPM for flash-lite, so 12
+    /// is safe; raise it (e.g. 300) once billing is enabled.
+    #[arg(long, default_value_t = 12)]
+    rpm: u64,
+
+    /// Log file path (default: <output>.log). Info level, or per-call detail with --verbose.
+    #[arg(long)]
+    log: Option<PathBuf>,
+
+    /// Verbose logging — record every Gemini API attempt and retry in the log.
+    #[arg(long)]
+    verbose: bool,
+
     /// Ignore the cache and re-extract every file.
     #[arg(long)]
     no_cache: bool,
@@ -74,15 +87,47 @@ async fn main() -> Result<()> {
         workers: cli.workers,
         max_concurrent: cli.max_concurrent,
         resume_timeout_secs: cli.timeout,
+        requests_per_minute: cli.rpm,
         ..Settings::default()
     };
     if let Some(m) = &cli.model {
         settings.model = m.clone();
+        settings.verifier_model = m.clone();
     }
+
+    // File logging (default <output>.log). --verbose adds per-API-call detail.
+    let log_path = cli.log.clone().unwrap_or_else(|| cli.output.with_extension("log"));
+    let level = if cli.verbose { log::LevelFilter::Debug } else { log::LevelFilter::Info };
+    // Keep the log focused on our own events (429s, retries, per-resume outcomes)
+    // rather than noisy HTTP/TLS internals.
+    let log_cfg = simplelog::ConfigBuilder::new()
+        .add_filter_ignore_str("hyper")
+        .add_filter_ignore_str("hyper_util")
+        .add_filter_ignore_str("reqwest")
+        .add_filter_ignore_str("rustls")
+        .add_filter_ignore_str("native_tls")
+        .add_filter_ignore_str("h2")
+        .add_filter_ignore_str("mio")
+        .add_filter_ignore_str("want")
+        .add_filter_ignore_str("tokio_util")
+        .build();
+    if let Ok(file) = std::fs::File::create(&log_path) {
+        let _ = simplelog::WriteLogger::init(level, log_cfg, file);
+    }
+    log::info!(
+        "run start: folder={} model={} rpm={} workers={} timeout={}s",
+        cli.folder.display(), settings.model, settings.requests_per_minute,
+        settings.workers, settings.resume_timeout_secs
+    );
 
     let key = GeminiClient::api_key_from_env()
         .context("set GEMINI_API_KEY in the environment or a .env file")?;
-    let client = GeminiClient::new(key, settings.max_retries, settings.max_concurrent)?;
+    let client = GeminiClient::new(
+        key,
+        settings.max_retries,
+        settings.max_concurrent,
+        settings.requests_per_minute,
+    )?;
 
     // discover files
     let mut files = util::discover_resumes(&cli.folder);
@@ -173,20 +218,34 @@ async fn main() -> Result<()> {
         pb.inc(1);
         match joined {
             Ok(Ok(rec)) => {
+                log::info!(
+                    "ok: {name} -> {} | {} | {:.1}y | {} [{}]",
+                    rec.name, rec.primary_role.label(), rec.years_experience,
+                    rec.experience_level.label(), rec.status.label()
+                );
                 pb.set_message(rec.name.clone());
                 if let Err(e) = store.upsert(&rec) {
+                    log::warn!("store upsert failed for {name}: {e:#}");
                     eprintln!("  warn: store upsert failed for {name}: {e:#}");
                 }
                 fresh.push(rec);
             }
-            Ok(Err(e)) => failures.push(format!("{name}: {e:#}")),
+            Ok(Err(e)) => {
+                log::warn!("FAILED {name}: {e:#}");
+                failures.push(format!("{name}: {e:#}"));
+            }
             Err(join_err) => {
-                failures.push(format!("{name}: internal error while parsing ({join_err})"))
+                log::warn!("PANIC {name}: {join_err}");
+                failures.push(format!("{name}: internal error while parsing ({join_err})"));
             }
         }
     }
     pb.finish_and_clear();
     let elapsed = t0.elapsed();
+    log::info!(
+        "run done: {} ok, {} failed, {:.1}s",
+        fresh.len(), failures.len(), elapsed.as_secs_f64()
+    );
 
     // combine this run's records, dedupe by identity
     let cached_count = cached.len();
@@ -203,7 +262,7 @@ async fn main() -> Result<()> {
     }
 
     // summary + KPIs
-    print_summary(&records, &failures, &cli.output, &csv, &json, &store_path);
+    print_summary(&records, &failures, &cli.output, &csv, &json, &store_path, &log_path);
     let stats = RunStats {
         total_files: files.len(),
         cached: cached_count,
@@ -286,6 +345,7 @@ fn filled(r: &CandidateRecord) -> usize {
     n
 }
 
+#[allow(clippy::too_many_arguments)]
 fn print_summary(
     records: &[CandidateRecord],
     failures: &[String],
@@ -293,6 +353,7 @@ fn print_summary(
     csv: &std::path::Path,
     json: &std::path::Path,
     store: &std::path::Path,
+    log: &std::path::Path,
 ) {
     let review = records
         .iter()
@@ -312,6 +373,10 @@ fn print_summary(
     println!("  CSV   : {}", csv.display());
     println!("  JSON  : {}", json.display());
     println!("  Store : {}", store.display());
+    println!("  Log   : {}", log.display());
+    if !failures.is_empty() {
+        println!("  ⓘ 429s / rate limits? see the Log above; on free tier add e.g. --rpm 8, or enable billing.");
+    }
     if review > 0 {
         println!(
             "\n  {review} row(s) flagged ⚠️ — they are sorted to the top of the Excel; \

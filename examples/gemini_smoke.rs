@@ -16,7 +16,7 @@ struct Mini {
 async fn main() -> anyhow::Result<()> {
     let _ = dotenvy::dotenv();
     let key = GeminiClient::api_key_from_env()?;
-    let client = GeminiClient::new(key, 4, 5)?;
+    let client = GeminiClient::new(key, 4, 5, 60)?;
 
     let resume = std::fs::read_to_string("sample_resumes/bob_backend_employed.txt")?;
     let schema = json!({

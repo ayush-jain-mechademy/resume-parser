@@ -172,8 +172,11 @@ pub struct Settings {
     pub verifier_model: String,
     /// Max concurrent resumes in flight.
     pub workers: usize,
-    /// Global cap on simultaneous Gemini requests (free-tier friendly).
+    /// Global cap on simultaneous Gemini requests (memory/connection bound).
     pub max_concurrent: usize,
+    /// Requests-per-minute throttle — the real free-tier guard. Free tier is
+    /// ~15 RPM for flash-lite, so 12 leaves headroom; raise it with billing.
+    pub requests_per_minute: u64,
     /// Below this many extracted characters a PDF is treated as scanned and sent
     /// to Gemini vision instead of relying on local text.
     pub min_text_chars: usize,
@@ -191,9 +194,12 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             model: "gemini-2.5-flash-lite".to_string(),
-            verifier_model: "gemini-2.5-flash".to_string(),
+            // Same model as the agents by default so free-tier users don't burn a
+            // second (lower) per-model quota. Override for a stronger auditor.
+            verifier_model: "gemini-2.5-flash-lite".to_string(),
             workers: 6,
             max_concurrent: 5,
+            requests_per_minute: 12,
             min_text_chars: 120,
             gap_flag_months: 2,
             max_retries: 4,

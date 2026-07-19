@@ -3,23 +3,58 @@
 
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine;
+use log::{debug, warn};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
+use tokio::sync::Mutex as AsyncMutex;
+use tokio::time::Instant as TokioInstant;
 
 const API_BASE: &str = "https://generativelanguage.googleapis.com/v1beta";
+
+/// Minimum-interval rate limiter: enforces at most `rpm` requests per minute
+/// across the whole process by handing each request a time slot spaced by
+/// `60/rpm` seconds. This is what actually keeps us under free-tier RPM limits
+/// (a concurrency cap alone does not — fast requests still exceed the rate).
+struct RateLimiter {
+    interval: Duration,
+    next: AsyncMutex<TokioInstant>,
+}
+
+impl RateLimiter {
+    fn new(rpm: u64) -> Self {
+        let rpm = rpm.max(1);
+        RateLimiter {
+            interval: Duration::from_secs_f64(60.0 / rpm as f64),
+            next: AsyncMutex::new(TokioInstant::now()),
+        }
+    }
+
+    /// Wait until this caller's slot; returns immediately if we're under rate.
+    async fn acquire(&self) {
+        let scheduled = {
+            let mut next = self.next.lock().await;
+            let now = TokioInstant::now();
+            let sched = if *next > now { *next } else { now };
+            *next = sched + self.interval;
+            sched
+        };
+        tokio::time::sleep_until(scheduled).await;
+    }
+}
 
 #[derive(Clone)]
 pub struct GeminiClient {
     http: reqwest::Client,
     api_key: String,
     max_retries: u32,
-    /// Global cap on in-flight requests, independent of resume-level concurrency.
-    /// Keeps free-tier rate limits from being blown by a burst of parallel calls.
+    /// Global cap on in-flight requests (memory/connection bound).
     sema: Arc<tokio::sync::Semaphore>,
+    /// Requests-per-minute throttle (the real free-tier guard).
+    rate: Arc<RateLimiter>,
     pub prompt_tokens: Arc<AtomicU64>,
     pub output_tokens: Arc<AtomicU64>,
     pub calls: Arc<AtomicU64>,
@@ -38,7 +73,12 @@ pub struct GenRequest<'a> {
 }
 
 impl GeminiClient {
-    pub fn new(api_key: String, max_retries: u32, max_concurrent: usize) -> Result<Self> {
+    pub fn new(
+        api_key: String,
+        max_retries: u32,
+        max_concurrent: usize,
+        rpm: u64,
+    ) -> Result<Self> {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(60))
             .connect_timeout(Duration::from_secs(15))
@@ -49,6 +89,7 @@ impl GeminiClient {
             api_key,
             max_retries,
             sema: Arc::new(tokio::sync::Semaphore::new(max_concurrent.max(1))),
+            rate: Arc::new(RateLimiter::new(rpm)),
             prompt_tokens: Arc::new(AtomicU64::new(0)),
             output_tokens: Arc::new(AtomicU64::new(0)),
             calls: Arc::new(AtomicU64::new(0)),
@@ -74,14 +115,17 @@ impl GeminiClient {
         let url = format!("{API_BASE}/models/{}:generateContent", req.model);
         let body = self.build_body(req);
 
-        // Hold a global permit for the whole call (incl. backoff) so the fleet of
-        // per-resume requests can't exceed the configured concurrency. If the
-        // semaphore is ever closed we proceed unthrottled rather than panic.
+        // In-flight cap (memory/connections). The RPM throttle below is the real
+        // free-tier guard.
         let _permit = self.sema.acquire().await.ok();
 
         let mut attempt = 0u32;
         loop {
             attempt += 1;
+            // Rate-limit EVERY attempt — retries also count against the quota.
+            self.rate.acquire().await;
+            debug!("→ {} attempt {}", req.model, attempt);
+
             let resp = self
                 .http
                 .post(&url)
@@ -93,22 +137,53 @@ impl GeminiClient {
             match resp {
                 Ok(r) => {
                     let status = r.status();
+                    let retry_after = r
+                        .headers()
+                        .get("retry-after")
+                        .and_then(|v| v.to_str().ok())
+                        .and_then(|s| s.trim().parse::<f64>().ok());
                     let text = r.text().await.unwrap_or_default();
                     if status.is_success() {
                         self.calls.fetch_add(1, Ordering::Relaxed);
+                        debug!("← {} 200 OK", req.model);
                         return self.extract_text(&text);
                     }
-                    // 429 / 5xx are transient; back off and retry.
-                    let transient = status.as_u16() == 429 || status.is_server_error();
+                    let code = status.as_u16();
+                    let transient = code == 429 || status.is_server_error();
                     if transient && attempt <= self.max_retries {
-                        backoff(attempt).await;
+                        let delay = retry_after
+                            .or_else(|| retry_delay_secs(&text))
+                            .unwrap_or_else(|| backoff_secs(attempt))
+                            + jitter();
+                        warn!(
+                            "{} HTTP {} (attempt {}/{}) — retrying in {:.1}s. {}",
+                            req.model,
+                            code,
+                            attempt,
+                            self.max_retries + 1,
+                            delay,
+                            quota_hint(code, &text)
+                        );
+                        tokio::time::sleep(Duration::from_secs_f64(delay)).await;
                         continue;
                     }
+                    warn!(
+                        "{} HTTP {} — giving up after {} attempts. {}",
+                        req.model,
+                        code,
+                        attempt,
+                        truncate(&text, 300)
+                    );
                     bail!("Gemini HTTP {}: {}", status, truncate(&text, 500));
                 }
                 Err(e) => {
                     if attempt <= self.max_retries {
-                        backoff(attempt).await;
+                        let delay = backoff_secs(attempt) + jitter();
+                        warn!(
+                            "{} request error (attempt {}): {e} — retrying in {:.1}s",
+                            req.model, attempt, delay
+                        );
+                        tokio::time::sleep(Duration::from_secs_f64(delay)).await;
                         continue;
                     }
                     return Err(e).context("Gemini request failed");
@@ -186,10 +261,47 @@ impl GeminiClient {
     }
 }
 
-async fn backoff(attempt: u32) {
-    // Exponential: 0.5s, 1s, 2s, 4s, ... capped at 16s.
-    let secs = (0.5 * 2f64.powi(attempt as i32 - 1)).min(16.0);
-    tokio::time::sleep(Duration::from_secs_f64(secs)).await;
+/// Exponential backoff seconds, capped at 30s.
+fn backoff_secs(attempt: u32) -> f64 {
+    2f64.powi(attempt as i32).min(30.0)
+}
+
+/// Small random jitter (0–0.5s) to avoid synchronized retries.
+fn jitter() -> f64 {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(0);
+    (nanos % 500) as f64 / 1000.0
+}
+
+/// Parse Gemini's suggested `retryDelay` (e.g. "17s") from a 429 body.
+fn retry_delay_secs(body: &str) -> Option<f64> {
+    let v: Value = serde_json::from_str(body).ok()?;
+    let details = v.get("error")?.get("details")?.as_array()?;
+    for d in details {
+        if let Some(rd) = d.get("retryDelay").and_then(|x| x.as_str()) {
+            if let Ok(f) = rd.trim_end_matches('s').parse::<f64>() {
+                return Some(f);
+            }
+        }
+    }
+    None
+}
+
+/// A short human hint about which quota was hit, for the log.
+fn quota_hint(code: u16, body: &str) -> String {
+    if code != 429 {
+        return String::new();
+    }
+    let b = body.to_ascii_lowercase();
+    if b.contains("per day") || b.contains("perday") || b.contains("requests per day") {
+        "→ DAILY free-tier quota (RPD) exhausted — resets in ~24h, or enable billing.".into()
+    } else if b.contains("per minute") || b.contains("perminute") || b.contains("per-minute") {
+        "→ per-minute quota (RPM) — lower --rpm.".into()
+    } else {
+        "→ rate limited — lower --rpm, or enable billing for higher limits.".into()
+    }
 }
 
 fn truncate(s: &str, n: usize) -> String {
