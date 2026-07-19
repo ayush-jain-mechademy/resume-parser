@@ -1,0 +1,16 @@
+# Build
+/target
+
+# Candidate PII — never commit real resumes or extracted data
+/real_resumes/
+*.sqlite
+*.sqlite-journal
+candidates.xlsx
+candidates.csv
+candidates.json
+real_candidates.*
+reviewed_candidates.*
+*.log
+
+# Secrets
+.env

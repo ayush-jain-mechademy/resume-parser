@@ -1,0 +1,25 @@
+Bob Sharma
+Senior Backend Engineer
+bob.sharma@outlook.com | 9123456789 | Pune, MH | github.com/bobsharma
+
+SUMMARY
+Backend engineer with 7+ years building scalable microservices and REST APIs in
+Java and Spring Boot.
+
+WORK EXPERIENCE
+
+Senior Backend Engineer, Acme Corp Pvt Ltd
+Jan 2021 - Present
+- Lead a team of 4 building payment microservices handling 2M requests/day
+- Designed event-driven architecture with Kafka and PostgreSQL
+
+Backend Developer, Beta Solutions Ltd
+June 2018 - December 2020
+- Developed order-management REST APIs in Spring Boot
+- Reduced p99 latency by 40% through query optimization
+
+EDUCATION
+B.E. Information Technology, University of Pune, 2014 - 2018
+
+TECHNICAL SKILLS
+Java, Spring Boot, Microservices, Kafka, PostgreSQL, Docker, Kubernetes, AWS

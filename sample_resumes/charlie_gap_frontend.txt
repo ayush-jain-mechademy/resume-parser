@@ -1,0 +1,21 @@
+Charlie D'Souza
+Frontend Developer
+Contact: charlie.d@yahoo.com  ///  +91-99887-76655
+Goa, India
+
+PROFILE
+Frontend developer specializing in React and modern JavaScript, passionate about
+building accessible, pixel-perfect user interfaces.
+
+EXPERIENCE
+Frontend Developer — Gamma Technologies
+03/2019 to 08/2025
+- Built responsive SPAs in React, Redux and TypeScript
+- Migrated legacy jQuery pages to a component-based design system
+- Worked closely with UX designers using Figma handoffs
+
+EDUCATION
+BCA, Goa University (2016 - 2019)
+
+SKILLS
+React, Redux, TypeScript, JavaScript, HTML5, CSS3, Tailwind, Next.js, Figma

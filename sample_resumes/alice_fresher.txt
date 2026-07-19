@@ -1,0 +1,24 @@
+ALICE MENON
+Aspiring Data Analyst
+Email: alice.menon@gmail.com  |  Mobile: +91 98765 43210
+Bengaluru, India  |  linkedin.com/in/alicemenon
+
+CAREER OBJECTIVE
+Recent computer science graduate seeking a Data Analyst role where I can apply my
+skills in SQL, data visualization and statistics to drive business decisions.
+
+EDUCATION
+B.Tech, Computer Science — VTU, Bengaluru
+2020 – 2024,  CGPA 8.4
+
+INTERNSHIP
+Data Analyst Intern — BrightMetrics (May 2024 – Jun 2024)
+- Built Power BI dashboards summarizing weekly sales KPIs
+- Wrote SQL queries to clean and aggregate customer datasets
+
+PROJECTS
+- Sales forecasting mini-project using Python (pandas, matplotlib)
+- COVID data dashboard in Tableau
+
+SKILLS
+SQL, Power BI, Tableau, Excel, Python (pandas), Statistics
