@@ -76,7 +76,7 @@ recursively) and it produces one spreadsheet row per candidate:
 | Flag | Default | What it does |
 |---|---|---|
 | `-o, --output <path>` | `candidates.xlsx` | Output file; `.csv`/`.json`/`.metrics.json` written alongside |
-| `--model <name>` | `gemini-2.5-flash-lite` | Gemini model for the specialist agents |
+| `--model <name>` | `gemini-3.1-flash-lite` | Gemini model for the agents (`gemini-flash-lite-latest` auto-tracks the newest) |
 | `--workers <n>` | `6` | Resumes processed concurrently |
 | `--max-concurrent <n>` | `5` | Max simultaneous in-flight requests (memory/connections) |
 | `--rpm <n>` | `12` | **Requests-per-minute throttle — the real rate-limit guard.** 12 is safe for the free tier (~15 RPM); raise to 300+ on a paid plan |

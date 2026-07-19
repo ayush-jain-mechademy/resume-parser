@@ -1,0 +1,50 @@
+{
+  "engineering": {
+    "avg_latency_secs": 13.779648402666666,
+    "cache_hit_rate_pct": 0.0,
+    "cached": 0,
+    "calls_per_resume": 7.0,
+    "cost_per_resume_usd": 0.0006323833333333333,
+    "cost_usd": 0.0037943,
+    "extracted_attempted": 6,
+    "extracted_ok": 6,
+    "failures": 0,
+    "files_discovered": 6,
+    "gemini_calls": 42,
+    "parse_success_rate_pct": 100.0,
+    "throughput_per_min": 4.354247528433938,
+    "timeouts": 0,
+    "tokens_in": 22459,
+    "tokens_out": 3871,
+    "vision_fallbacks": 0,
+    "wall_clock_secs": 82.677890416
+  },
+  "product": {
+    "auto_verified": 4,
+    "auto_verify_rate_pct": 80.0,
+    "candidates": 5,
+    "confidence": {
+      "High": 4,
+      "Medium": 1
+    },
+    "coverage": {
+      "both_pct": 100.0,
+      "email_pct": 100.0,
+      "name_pct": 100.0,
+      "phone_pct": 100.0,
+      "role_pct": 100.0
+    },
+    "employed": 3,
+    "experienced": 4,
+    "freshers": 1,
+    "review_rate_pct": 20.0,
+    "role_distribution": {
+      "Backend": 1,
+      "Data Analyst": 1,
+      "DevOps/Cloud": 1,
+      "Frontend": 1,
+      "Full Stack": 1
+    },
+    "with_current_gap": 1
+  }
+}

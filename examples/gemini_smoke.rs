@@ -30,7 +30,7 @@ async fn main() -> anyhow::Result<()> {
 
     let out: Mini = client
         .generate_json(GenRequest {
-            model: "gemini-2.5-flash-lite",
+            model: "gemini-3.1-flash-lite",
             system: Some("You extract fields from resumes. Return only the schema JSON."),
             prompt: format!("Resume:\n{resume}"),
             schema,

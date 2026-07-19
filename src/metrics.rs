@@ -24,7 +24,7 @@ fn pct(n: usize, d: usize) -> f64 {
     if d == 0 { 0.0 } else { n as f64 * 100.0 / d as f64 }
 }
 
-/// gemini-2.5-flash-lite list price (approx): $0.10/M in, $0.40/M out.
+/// flash-lite list price (approx): $0.10/M in, $0.40/M out (adjust per model).
 fn cost(in_tok: u64, out_tok: u64) -> f64 {
     in_tok as f64 / 1e6 * 0.10 + out_tok as f64 / 1e6 * 0.40
 }

@@ -193,10 +193,12 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            model: "gemini-2.5-flash-lite".to_string(),
+            // Current GA flash-lite (2.5-flash-lite is being retired for new users).
+            // Use `--model gemini-flash-lite-latest` to auto-track the newest.
+            model: "gemini-3.1-flash-lite".to_string(),
             // Same model as the agents by default so free-tier users don't burn a
             // second (lower) per-model quota. Override for a stronger auditor.
-            verifier_model: "gemini-2.5-flash-lite".to_string(),
+            verifier_model: "gemini-3.1-flash-lite".to_string(),
             workers: 6,
             max_concurrent: 5,
             requests_per_minute: 12,

@@ -58,7 +58,7 @@ Options:
 | Flag | Default | Meaning |
 |---|---|---|
 | `-o, --output` | `candidates.xlsx` | Output path (`.csv`/`.json` siblings written too) |
-| `--model` | `gemini-2.5-flash-lite` | Gemini model for the specialist agents |
+| `--model` | `gemini-3.1-flash-lite` | Gemini model for the agents (e.g. `gemini-flash-lite-latest` to auto-track newest) |
 | `--workers` | `6` | Resumes processed concurrently |
 | `--max-concurrent` | `5` | Global cap on simultaneous API calls — **lower if you hit rate limits** |
 | `--store` | `<output dir>/resume_store.sqlite` | Persistent cache + dedupe + audit trail |

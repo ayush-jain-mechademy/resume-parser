@@ -249,6 +249,7 @@ impl GeminiClient {
             .map(|parts| {
                 parts
                     .iter()
+                    .filter(|p| p.thought != Some(true)) // skip 3.x "thought" parts
                     .filter_map(|p| p.text.as_deref())
                     .collect::<String>()
             })
@@ -341,6 +342,10 @@ struct ContentBlock {
 #[derive(Deserialize)]
 struct PartBlock {
     text: Option<String>,
+    /// Gemini 3.x thinking models may return separate "thought" parts; these
+    /// must be excluded so only the answer JSON is parsed.
+    #[serde(default)]
+    thought: Option<bool>,
 }
 
 #[derive(Deserialize)]
